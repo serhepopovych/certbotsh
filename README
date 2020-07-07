@@ -1,0 +1,364 @@
+Certbot ACME Client embedded/IoT integration utility
+====================================================
+
+Certbot is a most powerful ACME client for Let's Encrypt certificate
+authority with lot of domain authentication and service configuration
+plugins.
+
+Written in Python with a lot of dependencies it might be unsuitable
+for use directly in embedded and IoT world.
+
+On the other hand it might be undesirable for large IoT deployments to
+directly contact Let's Encrypt servers playing at the edge of their
+rate limits.
+
+This utility tries to address both of the above and present POSIX shell
+helper that uses certbot to talk with Let's Encrypt and presents proxy
+infrastructure to issue certs for thousands of IoT devices.
+
+Features
+--------
+
+  o Single/Multiple account(s) access to Let's Encrypt services from
+    controllable set of hosts acting as proxy for IoT devices
+  o Minimal dependencies for proxy client on target devices:
+      - POSIX compatible /bin/sh
+      - install
+      - mktemp
+      - mv
+      - rm
+      - chmod
+      - cmp
+      - openssl
+      - wget/curl
+    most of which may be available through busybox or similar toolboxes.
+  o Standard certbot utility command line interface, no extra options.
+  o Uses DNS-01 authenticator and can be integrated with any DNS service
+    hosting providers (not only with explicitly supported by certbot
+    plugins) through CNAMEs pointing to different domain or delegated
+    subdomain that supports rfc2136 compliant dynamic updates.
+  o Run Certbot ACME Client under specified unprivileged user
+    (letsencrypt) on proxy host for improved security
+  o Supplementary group (certbot) whose members can execute certbotsh
+    to allow set of unprivileged users to access certbot instance under
+    specified user
+  o All in one script containing installer and client/server applets
+    to simplify deployments at both client (e.g. IoT device) and servers
+
+Requirements
+------------
+
+Domain or subdomain must be up and running either on hosting provider
+provided authoritative nameservers or privately controlled (delegated
+domain).
+
+While proxy server side configuration tested only on RHEL/CentOS 7.x and
+8.x releases it should work as well on other Linux (or BSD) systems
+possibly with slight modifications.
+
+Client side has it's minimal requirements described in Features section.
+
+Description
+-----------
+
+There are multiple usage scenarious possible (e.g. simple certbot
+wrapper to run under unprivileged user) with this utility but most
+common is a proxy between Let's Encrypt and own services consuming
+authority issued certificates.
+
+Consider following diagram with example.com as domain:
+
+  +----------------------------+               CNAMEs -> TXTs
+  | Hosting provider           |  _acme-challenge.www -> www._acme-le
+  | authoritative DNS servers  |                     ...
+  | managed by customer via    |  _acme-challenge     -> self._acme-le
+  | some UI (e.g. web portal)  |
+  |                            |        +------------------------------+
+  | +-----------------+ CNAME  |        | Let's Encrypt infrastructure |
+  | | ns1.hosting.net |<.......o..      |                              |
+  | +-----------------+        | .      |   +-------------------+      |
+  | +-----------------+ CNAME  | .......o..>| DNS-01 Validation |      |
+  | | ns2.hosting.net |<.......o..    . |   +---------^^--------+      |
+  | +-----------------+        |      . |             ||               |
+  +----------------------------+      . |   +---------vv--------+      |
+                                  DNS . |   | ACME frontend     |      |
+                                      . |   +-------------------+      |
+  +--------------------------------+  . |              ^               |
+  | certbotsh server (proxy)       |  . +--------------o---------------+
+  |                                |  .                .
+  | +-------------------------+ TXT|  .                .
+  | | ns._acme-le.example.com |<...o...                .
+  | +-------------------------+bind|                   .
+  | +----------------------------+ |    HTTP/ACME      .
+  | | acme-le.gw.api.example.com |<o....................
+  | +----------------------------+ |     certbot
+  |              ^ lighttpd        |
+  +--------------o-----------------+
+                 .
+                 ...................
+                                   .
+  +--------------------------------o----------------------------------+
+  | certbotsh client(s)            .                                  |
+  |                                . HTTP GET over TLS/SSL (HTTPS)    |
+  |     ....................................................          |
+  |     .          .         .         .          .        .          |
+  | +---v---+  +---v---+  +--v--+  +---v----+  +--v--+  +--v---+      |
+  | | dev-1 |  | dev-2 |  | www |  | portal |  | ftp |  | smtp |      |
+  | +-------+  +-------+  +-----+  +--------+  +-----+  +------+      |
+  |   ph1         ph2       ph3       ph4        ph5       ph6        |
+  |                                                                   |
+  | Fetch & unpack PKCS#12 encrypted with per client passphrase (phX) |
+  | file with privkey, chain, cert to /etc/letsencrypt/live/<fqdn>    |
+  | to retain compatibility with certbot filesystem pathes and naming |
+  |                                                                   |
+  +-------------------------------------------------------------------+
+
+In this diagram certbotsh server side running on RHEL/CentOS 7.x or 8.x
+with following components:
+
+  ns._acme-le.example.com
+  ~~~~~~~~~~~~~~~~~~~~~~~
+    ISC BIND 9.11.x supporting rfc2136 dynamic updates
+    authoritative master (only) DNS name server serving
+    _acme-le.example.com subdomain zone.
+
+    Example of zone file, named(8) config snippet among with
+    README file with instructions on how to configure BIND
+    can be found in ~${runas}/extra/bind subdirectory.
+
+  acme-le.gw.api.example.com
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Let's Encrypt ACME gateway for domain example.com running
+    certbot to get, update revoke certificates.
+
+    Single LE account for whole domain created by certbot
+    on this host.
+
+    Deploy hook (certbotsh-publish) is used to create PKCS#12
+    with privkey, chain and cert files created by certbot.
+
+    Either certbot-renew.timer or cron job takes care on
+    updating certificates that is near to expiry and not
+    revoked.
+
+    Each PKCS#12 file encrypted with per client passphrase
+    that is only known to this gateway/proxy and client this
+    certificate intended for. Strong cryptography algorithms
+    (AES256-CBC with SHA256) used for this by default and
+    can be adjusted in specific config files (publish.cfg)
+    if necessary.
+
+    At certificate issue time client hostname (domain) should
+    be known and resolvable to all IPv4 and IPv6 addresses as
+    specific configuration for lighttpd implemented to ensure
+    that client can only download it's own PKCS#12. Download
+    is done using HTTP GET method over TLS/SSL secure channel
+    with acme-le.gw.api.example.com certificate issued by
+    trusted certificate authority (e.g. Let's Encrypt).
+
+From certbotsh client side there is two actions required
+
+  1) Download and unpack PKCS#12 files to /etc/letsencrypt/live/<fqdn>
+     subdirectory (see certbotsh-update). There is crontab(5) file to
+     run certbotsh-update periodically to pull updated certificates
+     from gateway/proxy.
+
+  2) Execute pre, post and deploy hooks (see certbotsh-hook) to
+     stop service, install certificates and start service that
+     uses them.
+
+     In most cases certbotsh-hook $runas root to make sure it
+     have privileges necessary to restart service. It is started
+     by certbotsh-update and switched to root using sudo(8).
+
+Security
+--------
+
+  Proxy configuration shipped with secure by default.
+
+  However additional configurations like firewall and HTTP
+  authentication might be implemented if desired (however last one
+  has very little impact on security as compromise of single
+  certbotsh client would give access to HTTP authentication
+  credentials).
+
+  Whenever possible least privilege principle used (e.g. certbot
+  is running as unprivileged user to perform all actions).
+
+  PKCS#12 files encrypted with strong cryptography algorithms
+  (AES256-CBC with SHA256 for MAC by default) using per client
+  passphrase shared only between proxy and client so that compromise
+  of single client passphrase does not compromise the rest.
+
+  PKCS#12 files can only be downloaded by clients they intended to.
+  This check is done by lighttpd based on network (IPv4 and/or IPv6)
+  address of connecting client. Therefore whole TCP session needs to
+  be spoofed to access PKCS#12 of other client.
+
+  Lighttpd configured with minimal set of modules with HTTP to HTTPS
+  redirect and HTTP Strict Transport Security. Server certificate
+  must be issued by trusted by certbotsh clients authority (e.g.
+  Let's Encrypt). Only static content is served by lighttpd.
+
+  Where appropriate (e.g. hooks running by certbotsh-update) code
+  injection protection mechanisms applied.
+
+Usage
+-----
+
+usage: [vars] certbot.sh install [client|server|all]
+
+If argument to install is not specified 'client' is assumed.
+
+Accepted environment variables (e.g. in [vars]) with their defaults are
+
+    runas=letsencrypt
+                      User to install (and run) services as
+    certmgr=certbot
+                      Group whose members allowed to run services
+
+    httpd_domain=example.com
+                      Domain used for default (wildcard) server
+    httpd_hostname=acme-le.gw.api.$httpd_domain
+                      Virtual host name to configure in httpd
+
+Report bugs to http://github.com/serhepopovych/certbotsh
+
+Examples
+--------
+
+  (1) Deploy gateway/proxy acme-le.gw.api.example.com on CentOS 7.x or 8.x
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  # Install EPEL
+  $ sudo yum install -y epel-release && sudo yum update -y
+
+  # Install dependencies
+  $ sudo yum install -y diffutils psmisc curl lighttpd certbot
+
+  # Install certbot-dns-rfc2136 plugin on
+  # CentOS 7.x (python2) or CentOS 8.x (python3)
+  $ sudo yum install -y python2-certbot-dns-rfc2136 ||
+    sudo yum install -y python3-certbot-dns-rfc2136
+
+  # Fetch certbotsh
+  $ curl -s -o ~/certbot.sh \
+      https://raw.githubusercontent.com/serhepopovych/certbotsh/master/certbot.sh &&
+    chmod 0755 certbot.sh
+
+  # Install certbotsh
+  $ sudo \
+      httpd_domain='example.com' \
+      httpd_hostname='acme-le.gw.api.example.com \
+      ~/certbot.sh install server
+
+  # Patch dns_rfc2136.py to support CNAME/DNAME lookups
+  # CentOS 7.x (python2) or CentOS 8.x (python3)
+  $ if cd /usr/lib/python2.7/site-packages/certbot_dns_rfc2136/_internal ||
+       cd /usr/lib/python3.6/site-packages/certbot_dns_rfc2136/_internal
+    then
+        sudo patch <${s}${n}
+        cd - >/dev/null
+    fi
+    # Needed to recompile .pyo/.pyc as we run as unprivileged user later
+    sudo /usr/bin/certbot -h all
+
+  # Make sure to configure at least keyname and secret in
+    /var/lib/letsencrypt/.config/letsencrypt/rfc2136.ini
+    with values from step(2)
+
+  (2) Deploy _acme-le.example.com on CentOS 7.x or CentOS 8.x
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  # Install ISC BIND with chrooted configuration
+  $ sudo yum install -y bind-chroot
+
+  # Get /var/lib/letsencrypt/extra/bind/*
+  scp acme-le.gw.api.example.com:/var/lib/letsencrypt/extra/bind/* ~
+
+  # Generate TSIG key
+  $ sudo \
+      sh -c 'tsig-keygen -a hmac-sha256 acme-le.gw.api.example.com-key >>/etc/named.tsig.key'
+
+  # Install named(8) config snippet
+  $ sudo install \
+      -m 640 -o root -g named \
+      ~/named._acme-le.zones /etc/named._acme-le.zones
+
+  # Add named.tsig.key and named._acme-le.zones to /etc/named-chroot.files
+  $ grep '/etc/named\.tsig\.key' /etc/named-chroot.files ||
+    sudo sh -c 'echo "/etc/named.tsig.key" >>/etc/named-chroot.files'
+  $ grep '/etc/named\._acme-le\.zones' /etc/named-chroot.files ||
+    sudo sh -c 'echo "/etc/named._acme-le.zones" >>/etc/named-chroot.files'
+
+  # Make sure to add following configuration to /etc/named.conf
+      options {
+          /* This is needed for dns-rfc2136 plugin patch to resolve CNAMEs */
+          allow-recursion { <host -t a acme-le.gw.api.example.com>; };
+          recursion yes;
+      };
+      include "/etc/named.tsig.key";
+      include "/etc/named._acme-le.zones";
+
+  # Install named(8) zone file and adjust Resource Records (RRs) to point
+  # to correct IP addresses instead of 127.0.1.1 (edit named._acme-le.example.com)
+  $ sudo install -m 0644 -o named -g named \
+               ~/named._acme-le.example.com \
+      /var/named/named._acme-le.example.com
+
+  # Make sure dynamic zone updates can be commited by named(8)
+  $ sudo chown root:named /var/named && sudo chmod 1770 /var/named
+
+  # Start named(8)
+  $ sudo systemctl enable --now named-chroot
+
+  # At this point you can configure delegation of _acme-le.example.com
+  # from your hosting provider to ns._acme-le.example.com.
+
+  (3) Request trusted certificates for acme-le.gw.api.example.com and start lighttpd
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  # Note that when certbot is running as root it will switch to unprivileged
+  # user as certbot is an "alias" installed in /usr/local/bin/certbot and
+  # /usr/local/sbin/certbot.
+  #
+  # This will work only when /usr/local/bin and/or /usr/local/sbin preceeding
+  # /usr/bin, /bin and /usr/sbin, /sbin in PATH variable.
+  #
+  # If this fails to obtain certificates check _acme-le.example.com BIND settings,
+  # subdomain _acme-le.example.com delegation from your hosting provider and
+  # ~letsencrypt/.config/letsencrypt/rfc2136.ini. Make sure CNAMEs for
+  # _acme-challenge.acme-le.gw.api.example.com and _acme-challenge.example.com
+  # setup correctly and point to (non-existent as certbot will create them with
+  # dynamic updates) TXT records in _acme-le.example.com domain.
+
+  # Request certificates from Let's Encrypt for proxy/gateway (including wildcard)
+  $ sudo certbot -d acme-le.gw.api.example.com -d '*.example.com'
+
+  # Point lighttpd certificate dirs to /etc/letsencrypt/live
+  $ sudo ln -sf ../../letsencrypt/live/example.com /etc/lighttpd/pki/
+  $ sudo ln -sf ../../letsencrypt/live/acme-le.gw.api.example.com /etc/lighttpd/pki/
+  $ sudo ln -sf example.com /etc/lighttpd/pki/wildcard
+
+  # Adjust SELinux settings for lighttpd
+  $ sudo yum install -y policycoreutils
+  $ sudo setsebool -P httpd_setrlimit 1
+
+  # Start lighttpd(8)
+  $ sudo systemctl enable --now lighttpd
+
+  (4) Install certbotsh client side
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  It is fairly simple but depends on client type. At least you need to copy
+  certbot.sh to client, run installation and configure hooks:
+
+  # Fetch certbotsh
+  $ curl -s -o ~/certbot.sh \
+      https://raw.githubusercontent.com/serhepopovych/certbotsh/master/certbot.sh &&
+    chmod 0755 certbot.sh
+
+  # Install certbotsh
+  $ sudo ~/certbot.sh install client
+
+  # Use example ~letsencrypt/.config/letsencrypt/update.cfg to configure hooks.
