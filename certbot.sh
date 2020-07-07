@@ -771,7 +771,8 @@ they can be summarized to following:
        make sure user running named(8) service can write to that file
        and directory containing it for Dynamic DNS updates support
     4) generate TSIG key to control
-         tsig-keygen -a hmac-sha256 >>/etc/named.tsig.key
+         tsig-keygen >>/etc/named.tsig.key \
+             -a hmac-sha256 acme-le.gw.api.example.com-key
        (make sure /etc/named.tsig.key included from named.conf
         or other file included from named.conf)
     5) adjust values (espeically serial) in named._acme-le.example.com
@@ -851,9 +852,9 @@ Signed-off-by: H. Peter Anvin <hpa@zytor.com>
 https://bugzilla.redhat.com/show_bug.cgi?id=1679796
 https://github.com/certbot/certbot/pull/7244
 
-diff -urN a/usr/lib/python2.7/site-packages/certbot_dns_rfc2136/_internal/dns_rfc2136.py b/usr/lib/python2.7/site-packages/certbot_dns_rfc2136/_internal/dns_rfc2136.py
---- a/usr/lib/python2.7/site-packages/certbot_dns_rfc2136/_internal/dns_rfc2136.py
-+++ b/usr/lib/python2.7/site-packages/certbot_dns_rfc2136/_internal/dns_rfc2136.py
+diff -urN a/dns_rfc2136.py b/dns_rfc2136.py
+--- a/dns_rfc2136.py
++++ b/dns_rfc2136.py
 @@ -15,6 +15,7 @@
  from certbot import errors
  from certbot import interfaces
@@ -1090,13 +1091,15 @@ well as on non-RHEL systems with following commands:
 
     # Support both certbot 1.4.0 (python2) and 1.5.0+ (python3) on
     # RHEL/CentOS 7.x and 8.x. On non-RHEL systems pathes may vary.
+    # Run certbot as root to make sure it recompiles .pyo/.pyc files.
 
     $ if cd /usr/lib/python2.7/site-packages/certbot_dns_rfc2136/_internal ||
          cd /usr/lib/python3.6/site-packages/certbot_dns_rfc2136/_internal
       then
-          patch -p1 <${s}${n}
+          sudo patch <${s}${n}
           cd - >/dev/null
       fi
+    $ sudo /usr/bin/certbot -h all
 
 Follow RedHat bugzilla entry and upstream github.com pull/issue discussions for
 more details:
