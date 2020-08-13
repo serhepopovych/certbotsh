@@ -954,8 +954,8 @@ diff -urN a/dns_rfc2136.py b/dns_rfc2136.py
 +                target = rr.target
 +                if target in domain_names_searched:
 +                    # DNAME/CNAME loop!
-+                    errors.PluginError('%s %s loops seeking SOA for %s',
-+                                       suffix, repr(rr), domstr)
++                    raise errors.PluginError('%s %s loops seeking SOA for %s',
++                                             suffix, repr(rr), domstr)
 +
 +                # Restart from the root, replacing the current suffix
 +                prefix = prefix + target
