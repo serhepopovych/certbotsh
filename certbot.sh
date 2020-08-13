@@ -1767,11 +1767,36 @@ applet()
         # Ensure file is readable
         chmod 0644 "$tf" ||:
 
-        # Point hostname IP addresses to PKCS#12 file
-        getent ahosts "$domain" |\
+        # Add to directory with PKCS#12 file symlinks to IP address(es) from
+        {
+            # ... DNS resource records (RRs) for hostname
+            getent ahosts "$domain"
+            # ... ".sticky" subdirectory
+            if cd "$t/.sticky" 2>/dev/null; then
+                for ip in *; do
+                    # It has invalid IP/IPv6 address symbols?
+                    [ -n "${ip##*[^0-9a-fA-F:.]*}" ] || continue
+
+                    if [ -L "$ip" ]; then
+                       # It is a symlink pointing to /dev/null?
+                       [ "$ip" -ef /dev/null ] || continue
+                       echo "-$ip"
+                       ln -sf /dev/null "$td/.sticky/$ip"
+                    else
+                       # It is a regular file?
+                       [ -f "$ip" ] || continue
+                       echo "$ip"
+                       install -D -m 0644 /dev/null "$td/.sticky/$ip"
+                    fi
+                done
+                cd - >/dev/null
+            fi
+        } |\
         while read ip _; do
-            if ip="$td/$ip" && [ ! "$ip" -ef "$td" ]; then
-                ln -sf . "$ip"
+            if [ -n "${ip##-*}" ]; then
+                ip="$td/$ip" && [ "$ip" -ef "$td" ] || ln -sf . "$ip"
+            else
+                ip="$td/${ip#-}" && rm -f "$ip"
             fi
         done
 
