@@ -200,6 +200,13 @@ Security
   must be issued by trusted by certbotsh clients authority (e.g.
   Let's Encrypt). Only static content is served by lighttpd.
 
+  Digest authentication might be enabled to enhance protection
+  in environments where more specific network address prefix can be
+  injected (way to spoof TCP session) to make possible for unauthorized
+  parties to download PKCS#12 file. Password for digest authentication
+  is shared among all trusted hosts therefore it's compromise on single
+  host will reveal access from others.
+
   Where appropriate (e.g. hooks running by certbotsh-update) code
   injection protection mechanisms applied.
 
