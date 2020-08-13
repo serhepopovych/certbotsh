@@ -1764,6 +1764,9 @@ applet()
             -passout "file:$pf" -out "$tf" \
             #
 
+        # Ensure file is readable
+        chmod 0644 "$tf" ||:
+
         # Point hostname IP addresses to PKCS#12 file
         getent ahosts "$domain" |\
         while read ip _; do
