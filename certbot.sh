@@ -297,15 +297,17 @@ installer()
                     o="$(file_owner_human "$out")" &&
                     chown "$o" "$t" || rc=$?
                 fi
-                if [ $rc -eq 0 ]; then
+                while [ $rc -eq 0 ]; do
                     if [ -L "$out" ] || [ -e "$out" -a ! -f "$out" ]; then
                         rm -f "$out" ||:
                     fi
                     if [ -e "$out" ]; then
+                        [ -z "${put__skip_existing-}" ] || break
                         out="$out.certbotsh-new"
                     fi
                     mv -f "$t" "$out" || rc=$?
-                fi
+                    break
+                done
             fi
         else
             rc=$?
@@ -1267,6 +1269,7 @@ EOF
         new "$t" "$runas" "$runas" 0400
     } # update_cfg
 
+    local update='' put__skip_existing
     local homedir configdir cachedir extradir htdocsdir
     local t r
     local sudoers_line_runas sudoers_line_root sudoers_progs
@@ -1276,7 +1279,7 @@ EOF
     {
         local rc=$?
         cat >&2 <<EOF
-usage: [vars] $prog_name install [client|server|all]
+usage: [vars] $prog_name {install [client|server|all] | update}
 
 If argument to install is not specified 'client' is assumed.
 
@@ -1298,38 +1301,53 @@ EOF
         exit $rc
     }
 
-    [ $# -le 2 ] || usage
-    [ "${1-}" = 'install' ] || usage
-
-    case "${2-}" in
-        'all')
-            set -- "$1" '|client|server|'
-            ;;
-        '')
-            set -- "$1" '|client|'
-            ;;
-        'client'|'server')
-            set -- "$1" "|$2|"
-            ;;
-        *)
-            ! : || usage
-            ;;
-    esac
-
-    if [ x$(id -u) != x0 ]; then
-        echo >&2 "$prog_name: must run install as uid 0"
-        exit 1
-    fi
-
     if [ ! -f "$this" ]; then
         echo >&2 "$prog_name: \"$this\" is not found (read from stdin or -c?)"
         exit 1
     fi
 
-    if [ "$this" -ef "$install_to" ]; then
-        echo >&2 "$prog_name: already installed"
-        exit 0
+    if [ x$(id -u) != x0 ]; then
+        echo >&2 "$prog_name: must run as uid 0"
+        exit 1
     fi
+
+    case "${1-}" in
+        'install')
+            [ $# -le 2 ] || usage
+
+            case "${2-}" in
+                'all')
+                    set -- "$1" '|client|server|'
+                    ;;
+                '')
+                    set -- "$1" '|client|'
+                    ;;
+                'client'|'server')
+                    set -- "$1" "|$2|"
+                    ;;
+                *)
+                    ! : || usage
+                    ;;
+            esac
+
+            if [ "$this" -ef "$install_to" ]; then
+                echo >&2 "$prog_name: already installed"
+                exit 0
+            fi
+            ;;
+        'update')
+            update='1'
+
+            if [ ! "$this" -ef "$install_to" ]; then
+                echo >&2 "$prog_name: not installed. Hint: run '$install_to'."
+                exit 0
+            fi
+            ;;
+        *)
+            ! : || usage
+            ;;
+    esac
+    put__skip_existing="$update"
 
     # Sudoers(5) template
     sudoers_line_runas="%$certmgr ALL=($runas:$runas) SETENV:NOPASSWD: "
@@ -1376,8 +1394,13 @@ EOF
     }
     eval '_usermod "$runas" "$homedir"'
 
-    # Install self
-    install -Dpm0750 -g "$certmgr" "$this" "$install_to"
+    if [ -z "$update" ]; then
+        # Install self
+        install -D -m 0750 -p -g "$certmgr" "$this" "$install_to"
+    else
+        # Update ownership and permissions on self
+        new "$install_to" 'root' "$certmgr" 0750
+    fi
 
     # Working directory
     t='/etc/letsencrypt/' && new "$t"
