@@ -1370,8 +1370,14 @@ EOF
         local runas="${1:?missing 1st arg to ${func}() (<runas>)}"
         local home="${2:?missing 2d arg to ${func}() (<home>)}"
         local comment='Lets Encrypt user'
-        local shell='/bin/false'
+        local shell="${shell:-/bin/sh}"
         local cmd='groupadd' args='-r -f'
+
+        # Assert in case there is no shell exists.
+        if [ ! -x "$shell" ]; then
+            echo >&2 "$prog_name: \"$shell\" interpreter doesn't executable"
+            exit 1
+        fi
 
         # groupadd
         "$cmd" $args "$runas"
@@ -1396,7 +1402,7 @@ EOF
     }
     eval '_usermod "$runas" "$homedir"'
 
-    if [ "$2" != 'update' ]; then
+    if [ -n "${2##*|update|*}" ]; then
         # Install self
         install -D -m 0750 -p -g "$certmgr" "$this" "$install_to"
     else
@@ -1960,7 +1966,6 @@ applet()
             [ -n "$cmd" ] || return 0
             shift
 
-            local shell="${shell:-/bin/sh}"
             local rc=125
 
             # Strictly check input from hook execution to avoid injection
@@ -2049,13 +2054,6 @@ applet()
         if [ ! -d "$live_dir" ]; then
             rm -f "$live_dir" ||:
             install -d "$live_dir"
-        fi
-
-        # Shell interpreter to run hooks (not using $SHELL as it is /bin/false)
-        shell='/bin/sh'
-        if [ ! -x "$shell" ]; then
-            echo >&2 "$prog_name: \"$shell\" interpreter doesn't executable"
-            exit 1
         fi
 
         exit_handler()
