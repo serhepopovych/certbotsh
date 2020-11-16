@@ -1269,7 +1269,7 @@ EOF
         new "$t" "$runas" "$runas" 0400
     } # update_cfg
 
-    local update='' put__skip_existing
+    local put__skip_existing=''
     local homedir configdir cachedir extradir htdocsdir
     local t r
     local sudoers_line_runas sudoers_line_root sudoers_progs
@@ -1342,12 +1342,14 @@ EOF
                 echo >&2 "$prog_name: not installed. Hint: run '$install_to'."
                 exit 0
             fi
+
+            set -- "$1" '|update|'
+            put__skip_existing="$2"
             ;;
         *)
             ! : || usage
             ;;
     esac
-    put__skip_existing="$update"
 
     # Sudoers(5) template
     sudoers_line_runas="%$certmgr ALL=($runas:$runas) SETENV:NOPASSWD: "
@@ -1394,7 +1396,7 @@ EOF
     }
     eval '_usermod "$runas" "$homedir"'
 
-    if [ -z "$update" ]; then
+    if [ "$2" != 'update' ]; then
         # Install self
         install -D -m 0750 -p -g "$certmgr" "$this" "$install_to"
     else
