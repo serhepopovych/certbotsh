@@ -1029,10 +1029,10 @@ diff -urN a/dns_rfc2136.py b/dns_rfc2136.py
          try:
 +            logmsg = 'Query '+str(domain)
              try:
-                 response = dns.query.tcp(request, self.server, port=self.port)
-             except OSError as e:
+                 response = dns.query.tcp(request, self.server, self._default_timeout, self.port)
+             except (OSError, dns.exception.Timeout) as e:
                  logger.debug('TCP query failed, fallback to UDP: %s', e)
-                 response = dns.query.udp(request, self.server, port=self.port)
+                 response = dns.query.udp(request, self.server, self._default_timeout, self.port)
              rcode = response.rcode()
 +            logmsg += ': '+dns.rcode.to_text(rcode)
  
