@@ -1975,7 +1975,8 @@ applet()
 
             eval $(
                 {
-                    "$shell" -c "$cmd" "$name" "$@"
+                    set +e
+                    /bin/sh -c "$cmd" "$name" "$@"
                     echo "rc=$?"
                 } |\
                 while read vv; do
