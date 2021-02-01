@@ -1933,7 +1933,7 @@ applet()
             # authentication) should be configured through utility specific
             # configuration file (e.g. ~$runas/.wgetrc or ~$runas/.curlrc).
             local wget_args='-q -O %s %s'
-            local curl_args='-s -o %s %s'
+            local curl_args='-s -f -o %s %s'
             local args
 
             local fetch
@@ -1943,7 +1943,7 @@ applet()
                 #
             do
                 # Installed?
-                type "$fetch" >/dev/null 2>&1 || continue
+                command -v "$fetch" >/dev/null 2>&1 || continue
                 # Have args for it?
                 eval "args=\"\${${fetch}_args-}\""
                 [ -n "$args" ] || continue
