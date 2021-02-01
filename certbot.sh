@@ -2320,8 +2320,8 @@ applet()
             s="${s%@*}"
 
             # Skip invalid shell variable names
-            [ -n "${s##[0-9]*}" ] || return
-            [ -n "${s##*[^[:alnum:]_]*}" ] || return
+            [ -n "${s##[0-9]*}" ] || return 0
+            [ -n "${s##*[^[:alnum:]_]*}" ] || return 0
 
             eval "local fn=\"\${${s}_${h}-}\""
             [ -z "$fn" ] || "$fn" "$@" || return
