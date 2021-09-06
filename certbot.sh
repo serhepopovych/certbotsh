@@ -1804,6 +1804,7 @@ applet()
             getent ahosts "$domain"
             # ... ".sticky" subdirectory
             if cd "$t/.sticky" 2>/dev/null; then
+                td="$td/.sticky" && install -d -m 2775 "$td"
                 for ip in *; do
                     # It has invalid IP/IPv6 address symbols?
                     [ -n "${ip##*[^0-9a-fA-F:.]*}" ] || continue
@@ -1812,12 +1813,12 @@ applet()
                        # It is a symlink pointing to /dev/null?
                        [ "$ip" -ef /dev/null ] || continue
                        echo "-$ip"
-                       ln -sf /dev/null "$td/.sticky/$ip"
+                       ln -sf /dev/null "$td/$ip"
                     else
                        # It is a regular file?
                        [ -f "$ip" ] || continue
                        echo "$ip"
-                       install -D -m 0644 /dev/null "$td/.sticky/$ip"
+                       : >"$td/$ip"
                     fi
                 done
                 cd - >/dev/null
