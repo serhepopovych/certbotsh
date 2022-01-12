@@ -1906,7 +1906,7 @@ applet()
             local rc=0
 
             eval "t=\"\${$v-}\" && [ -n \"\$t\" ]" || rc=$?
-            echo "local $n='$t'"
+            printf -- 'local %s='\''%s'\''\n' "$n" "$t"
 
             if [ $rc -ne 0 ]; then
                 [ -n "$q" ] ||
@@ -2023,7 +2023,11 @@ applet()
                         'post_hook'   \
                         #
                     do
-                        eval "echo \"local \${c}_\${n}='\${${c}_${n}-}'\""
+                        eval "
+                            printf -- 'local %s_%s='\''%s'\''\n' \
+                                '${c}' '${n}'                    \
+                                \"\${${c}_${n}-}\"
+                        "
                     done
 
                     _certs="${_certs:+$_certs }${c}"
