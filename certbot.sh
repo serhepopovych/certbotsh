@@ -1807,7 +1807,7 @@ applet()
                 td="$td/.sticky" && install -d -m 2775 "$td"
                 for ip in *; do
                     # It has invalid IP/IPv6 address symbols?
-                    [ -n "${ip##*[^0-9a-fA-F:.]*}" ] || continue
+                    [ -n "${ip##*[!0-9a-fA-F:.]*}" ] || continue
 
                     if [ -L "$ip" ]; then
                        # It is a symlink pointing to /dev/null?
@@ -2012,7 +2012,7 @@ applet()
                 for c in $certs; do
                     # Skip invalid shell variable names
                     [ -n "${c##[0-9]*}" ] || continue
-                    [ -n "${c##*[^[:alnum:]_]*}" ] || continue
+                    [ -n "${c##*[![:alnum:]_]*}" ] || continue
 
                     for n in          \
                         'url'         \
@@ -2326,7 +2326,7 @@ applet()
 
             # Skip invalid shell variable names
             [ -n "${s##[0-9]*}" ] || return 0
-            [ -n "${s##*[^[:alnum:]_]*}" ] || return 0
+            [ -n "${s##*[![:alnum:]_]*}" ] || return 0
 
             eval "local fn=\"\${${s}_${h}-}\""
             [ -z "$fn" ] || "$fn" "$@" || return
@@ -2579,7 +2579,7 @@ _EOF
 
         # Fetch and evaluate commands (variable assignments) from standard input
         # is safe as we $runas user that makes command injection meaningless.
-        if [ -n "${IN_USER_SH##*[^0-9]*}" ] &&
+        if [ -n "${IN_USER_SH##*[!0-9]*}" ] &&
            kill -0 "$IN_USER_SH" 2>/dev/null
         then
             while read -r t; do
