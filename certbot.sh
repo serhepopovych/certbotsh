@@ -1833,11 +1833,13 @@ applet()
         done
 
         # Install new (temporary) data
-        mv -f "$t" "$td" 2>/dev/null ||:
-        if mv -f "$td" "$t"; then
-            rm -rf "$t/$domain" && chmod 0755 "$t" && td='' ||:
-        else
-            mv -f "$td/$domain" "$t" 2>/dev/null ||:
+        if mv -f "$t" "$td"; then
+            if mv -f "$td" "$t"; then
+                chmod 0755 "$t" ||:
+                td="$t/$domain"
+            else
+                mv -f "$td/$domain" "$t" ||:
+            fi
         fi
 
         ## Leave renewed certificate lineage
