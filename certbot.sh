@@ -1833,7 +1833,7 @@ applet()
         done
 
         # Install new (temporary) data
-        if mv -f "$t" "$td"; then
+        if ! [ -e "$t" ] || mv -f "$t" "$td"; then
             if mv -f "$td" "$t"; then
                 chmod 0755 "$t" ||:
                 td="$t/$domain"
